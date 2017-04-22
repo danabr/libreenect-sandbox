@@ -10,6 +10,8 @@
 #include "flextGL.h"
 #include <GLFW/glfw3.h>
 
+#include "landscape.h"
+
 struct Vertex
 {
     float x, y;
@@ -262,23 +264,22 @@ struct ShaderProgram : public WithOpenGLBindings
 
 class Viewer : WithOpenGLBindings {
 private:
+    Landscape& landscape;
     bool shouldStop;
     GLFWwindow* window;
     GLuint triangle_vbo, triangle_vao;
     ShaderProgram renderShader;
     ShaderProgram renderGrayShader;
 	std::string shader_folder;
-    std::map<std::string,libfreenect2::Frame*> frames;
     Texture<F8C4> rgb;
-    Texture<F32C1> ir;
+    Texture<F8C4> ir;
     int win_width;
     int win_height;
 public:
-    Viewer();
+    Viewer(Landscape&);
     void initialize();
     virtual void onOpenGLBindingsChanged(OpenGLBindings *b);
     bool render();
-    void addFrame(std::string id,libfreenect2::Frame* frame);
     void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
     void winsize_callback(GLFWwindow* window, int w, int h);
     static void key_callbackstatic(GLFWwindow* window, int key, int scancode, int action, int mods);

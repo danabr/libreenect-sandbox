@@ -1,8 +1,11 @@
 #include "viewer.h"
 #include <cstdlib>
+#include <cmath>
 
 
-Viewer::Viewer() : shader_folder("src/shader/"), 
+Viewer::Viewer(Landscape& l) :
+                   landscape(l),
+                   shader_folder("src/shader/"), 
                    win_width(600),
                    win_height(400)
 {
@@ -77,8 +80,7 @@ void Viewer::initialize()
         "void main(void)"
         "{"
             "ivec2 uv = ivec2(FragmentIn.TexCoord.x, FragmentIn.TexCoord.y);"
-            "tempColor = texelFetch(Data, uv);"
-            "Color = vec4(tempColor.x/4500, tempColor.x/4500, tempColor.x/4500, 1);"
+            "Color = texelFetch(Data, uv);"
         "}";
     std::string fragmentshader = ""
         "#version 330\n"
@@ -151,35 +153,22 @@ bool Viewer::render()
     // wipe the drawing surface clear
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    GLint x = 0, y = 0;
-    int fb_width, fb_width_half, fb_height, fb_height_half;
-
-    std::map<std::string, libfreenect2::Frame*>::iterator iter;
-
-    for (iter = frames.begin(); iter != frames.end(); ++iter)
-    {
-        libfreenect2::Frame* frame = iter->second;
+    int fb_width, fb_height;
 
         // Using the frame buffer size to account for screens where window.size != framebuffer.size, e.g. retina displays
         glfwGetFramebufferSize(window, &fb_width, &fb_height);
-        fb_width_half = (fb_width + 1) / 2;
-        fb_height_half = (fb_height + 1) / 2;
 
-        glViewport(x, y, fb_width_half, fb_height_half);
-        x += fb_width_half;
-        if (x >= (fb_width - 1))
-        {
-            x = 0;
-            y += fb_height_half;
-        }
+        glViewport(0, 0, fb_width, fb_height);
 
-        float w = static_cast<float>(frame->width);
-        float h = static_cast<float>(frame->height);
+        int w = 512;
+        int h = 424;
+        float wf = static_cast<float>(w);
+        float hf = static_cast<float>(h);
 
         Vertex bl = { -1.0f, -1.0f, 0.0f, 0.0f };
-        Vertex br = { 1.0f, -1.0f, w, 0.0f }; 
-        Vertex tl = { -1.0f, 1.0f, 0.0f, h };
-        Vertex tr = { 1.0f, 1.0f, w, h };
+        Vertex br = { 1.0f, -1.0f, wf, 0.0f }; 
+        Vertex tl = { -1.0f, 1.0f, 0.0f, hf };
+        Vertex tr = { 1.0f, 1.0f, wf, hf };
         Vertex vertices[] = {
             bl, tl, tr, 
             tr, br, bl
@@ -201,34 +190,45 @@ bool Viewer::render()
         gl()->glEnableVertexAttribArray(texcoord_attr);
 
 
-        if (iter->first == "RGB" || iter->first == "registered")
-        {
-            renderShader.use();
+          renderGrayShader.use();
 
-            rgb.allocate(frame->width, frame->height);
-            std::copy(frame->data, frame->data + frame->width * frame->height * frame->bytes_per_pixel, rgb.data);
-            rgb.flipY();
-            rgb.upload();
-            glDrawArrays(GL_TRIANGLES, 0, 6);
-
-            rgb.deallocate();
-
+        ir.allocate(w, h);
+        // std::copy(frame->data, frame->data + frame->width * frame->height * frame->bytes_per_pixel, ir.data);
+        Landpoint* fs = &landscape[0];
+        float* fd = (float*)(ir.data);
+        int num_points =w*h;
+        for(int i = 0; i < num_points; i++) {
+          float height = fs->height;
+          //ir.data[i] = frame->data[i];
+          unsigned char* d = (unsigned char*)fd;
+          unsigned char v = round(255*height);
+          d[0] = v; d[1] = v; d[2] = v;
+          //if(height < 0.6) { // BGR
+          //  d[0] = 49; d[1] = 8; d[2] = 8;
+          //} else if(height < 0.7f) {
+          //  d[0] = 208; d[1] = 97; d[2] = 97;
+          //} else if(height < 0.8f) {
+          //  d[0] = 124; d[1] = 205; d[2] = 205;
+          //} else if(height < 0.9f) {
+          //  d[0] = 53; d[1] = 205; d[2] = 111;
+          //} else if(height < 0.95f) {
+          //  d[0] = 21; d[1] = 103; d[2] = 136;
+          //} else if(height < 1.0f) {
+          //  d[0] = 110; d[1] = 125; d[2] = 136;
+          //} else if(height == 1.0f) {
+          //  d[0] = 0; d[1] = 0; d[2] = 0;
+          //}
+          // *fd = *fs;
+          ++fs;
+          ++fd;
         }
-        else
-        {
-            renderGrayShader.use();
-
-            ir.allocate(frame->width, frame->height);
-            std::copy(frame->data, frame->data + frame->width * frame->height * frame->bytes_per_pixel, ir.data);
-            ir.flipY();
-            ir.upload();
-            glDrawArrays(GL_TRIANGLES, 0, 6);
-            ir.deallocate();
-        }
+        // ir.flipY();
+        ir.upload();
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        ir.deallocate();
 
         gl()->glDeleteBuffers(1, &triangle_vbo);
         gl()->glDeleteVertexArrays(1, &triangle_vao);
-    }
 
     // put the stuff we've been drawing onto the display
     glfwSwapBuffers(window);
@@ -236,9 +236,4 @@ bool Viewer::render()
     glfwPollEvents();
 
     return shouldStop || glfwWindowShouldClose(window);
-}
-
-void Viewer::addFrame(std::string id, libfreenect2::Frame* frame)
-{
-    frames[id] = frame;
 }
